@@ -2,6 +2,7 @@
 #include "resource_dir.h"	// utility header for SearchAndSetResourceDir
 #include "math.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 typedef struct {
 	Vector2 pos;
@@ -10,28 +11,60 @@ typedef struct {
 } Corpo;
 
 // Gravitational constant
-const double G = 6.674e-11;
+const double G = 1;
 
-void atualiza_posicao_planeta(Corpo* planeta, Corpo* sol, double dt) {
-	double dx = sol->pos.x - planeta->pos.x;
-	double dy = sol->pos.y - planeta->pos.y;
-	double distSq = dx*dx + dy*dy;
-	double dist = sqrt(distSq);
+// Definindo corpos
+const double dt = 0.1;
 
-	// Fórmula da força entre massas de newton
-	double force = (G * planeta->mass * sol->mass) / distSq;
+void atualiza_sistema_gravidade(Corpo* corpos, int n) {
+	
+    for (int i = 0; i < n; i++) {
 
-	// Aceleração do planeta
-	double ax = G * planeta->mass * dx / distSq;
-	double ay = G * planeta->mass * dy / distSq;
+        float ax = 0;
+        float ay = 0;
+        double maxVel = 50.0;
 
-	// Atualiza a velocidade
-	planeta->vel.x += ax * dt;
-	planeta->vel.y += ay * dt;
+        for (int j = 0; j < n; j++) {
 
-	// atualiza a posição
-	planeta->pos.x += planeta->vel.x * dt;
-	planeta->pos.y += planeta->vel.y * dt;
+            if (i == j) continue;
+
+            float dx = corpos[j].pos.x - corpos[i].pos.x;
+            float dy = corpos[j].pos.y - corpos[i].pos.y;
+
+			float distSq = dx*dx + dy*dy + 0.01f;
+            float dist = sqrt(distSq);
+
+            float f = G * corpos[j].mass / distSq;
+
+            ax += f * dx / dist;
+            ay += f * dy / dist;
+        }
+
+        corpos[i].vel.x += ax * dt;
+        corpos[i].vel.y += ay * dt;
+
+        if (corpos[i].vel.x > maxVel) corpos[i].vel.x = maxVel;
+		if (corpos[i].vel.x < -maxVel) corpos[i].vel.x = -maxVel;
+
+		if (corpos[i].vel.y > maxVel) corpos[i].vel.y = maxVel;
+		if (corpos[i].vel.y < -maxVel) corpos[i].vel.y = -maxVel;
+    }
+
+    for (int i = 0; i < n; i++) {
+        corpos[i].pos.x += corpos[i].vel.x * dt;
+        corpos[i].pos.y += corpos[i].vel.y * dt;
+    }
+}
+
+void adicionar_corpo_lista(Corpo** arr, int* count, int* capacity, Corpo b) {
+	if (*count >= *capacity) { // se o valor de count for maior ou igual ao valor da capacidade...
+        *capacity *= 2; // dobra o tamanho da capacidade
+        *arr = realloc(*arr, (*capacity) * sizeof(Corpo)); // realoca a memória pro array
+    }
+
+    (*arr)[*count] = b; // coloca o próximo corpo no próximo lugar disponível
+    printf("Adicionado corpo de massa %f no array.\n", b.mass);
+    (*count)++; // seta o valor do próximo lugar disponível
 }
 
 
@@ -39,6 +72,11 @@ int main ()
 {
 	int WIDTH = 1280;
 	int HEIGHT = 800;
+
+	int capacity = 100;
+	int count = 0;
+
+	Corpo* corpos = malloc(capacity * sizeof(Corpo)); // realoca memória para capacidade disponível
 
 	// Tell the window to use vsync and work on high DPI displays
 	SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI);
@@ -54,23 +92,21 @@ int main ()
 	Corpo sol = {
 		{WIDTH/2, HEIGHT/2},
 		{0, 0},
-		1989000
+		10000
 	};
 
 	Corpo planeta = {
 		{WIDTH/2, HEIGHT/2-300},
-		{0.0001, 0},
-		5972
+		{0.01, 0},
+		10
 	};
 
 	Corpo planeta2 = {
 		{WIDTH/2-300, HEIGHT/2},
-		{0.0001, 0},
-		10000
+		{0.01, 0},
+		5
 	};
-	// Definindo corpos
-
-	double dt = 4000;
+	
 
 	//trail
 	Vector2 pos = {WIDTH/2, HEIGHT/2-300};
@@ -86,18 +122,15 @@ int main ()
     BeginTextureMode(trail);
         ClearBackground(BLANK);
     EndTextureMode();
+
+    adicionar_corpo_lista(&corpos, &count, &capacity, sol);
+    adicionar_corpo_lista(&corpos, &count, &capacity, planeta);
+    adicionar_corpo_lista(&corpos, &count, &capacity, planeta2);
 	
 	// game loop
 	while (!WindowShouldClose()) // run the loop until the user presses ESCAPE or presses the Close button on the window
 	{
-		sol.pos.x = GetMouseX();
-		sol.pos.y = GetMouseY();
-
-		pos.x = planeta.pos.x;
-		pos.y = planeta.pos.y;
-
-		pos2.x = planeta2.pos.x;
-		pos2.y = planeta2.pos.y;
+		atualiza_sistema_gravidade(corpos, count);
 
 		// Desenha apenas o novo segmento no trail
         BeginTextureMode(trail);
@@ -117,13 +150,13 @@ int main ()
 		ClearBackground(BLACK);
 
 		// DESENHA O SOL
-		DrawCircleV(sol.pos, 20, WHITE); 
+		DrawCircleV(corpos[0].pos, 20, WHITE); 
 
 		// DESENHA O PLANETA
-		DrawCircleV(planeta.pos, 5, RED); 
+		DrawCircleV(corpos[1].pos, 5, RED); 
 
 		// DESENHA O PLANETA2
-		DrawCircleV(planeta2.pos, 7, GREEN); 
+		DrawCircleV(corpos[2].pos, 7, GREEN); 
 
 		// desenha o trail
 		DrawTextureRec(
@@ -135,9 +168,6 @@ int main ()
 
 		// end the frame and get ready for the next one  (display frame, poll input, etc...)
 		EndDrawing();
-
-		atualiza_posicao_planeta(&planeta, &sol, dt);
-		atualiza_posicao_planeta(&planeta2, &sol, dt);
 	}
 
 	UnloadRenderTexture(trail);
