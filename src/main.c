@@ -11,19 +11,25 @@ typedef struct {
 } Corpo;
 
 // Gravitational constant
-const double G = 1;
+const double G = 0.9;
 
 // Definindo corpos
-const double dt = 0.1;
+const double dt = 0.3;
+
+const double SOFTENING = 1;
 
 void atualiza_sistema_gravidade(Corpo* corpos, int n) {
+
+	static Vector2 acc[1024];
+
+	// zera aceleração
+	for (int i = 0; i < n; i++) {
+		acc[i] = (Vector2){0,0};
+	}
 	
+	// calcula aceleração
     for (int i = 0; i < n; i++) {
-
-        float ax = 0;
-        float ay = 0;
         double maxVel = 50.0;
-
         for (int j = 0; j < n; j++) {
 
             if (i == j) continue;
@@ -31,17 +37,18 @@ void atualiza_sistema_gravidade(Corpo* corpos, int n) {
             float dx = corpos[j].pos.x - corpos[i].pos.x;
             float dy = corpos[j].pos.y - corpos[i].pos.y;
 
-			float distSq = dx*dx + dy*dy + 0.01f;
-            float dist = sqrt(distSq);
+			float distSq = dx*dx + dy*dy + SOFTENING*SOFTENING;
 
-            float f = G * corpos[j].mass / distSq;
+			double invDist = 1.0 / sqrt(distSq);
+			double invDist3 = invDist * invDist * invDist;
 
-            ax += f * dx / dist;
-            ay += f * dy / dist;
+            acc[i].x += G * corpos[j].mass * dx * invDist3;
+            acc[i].y += G * corpos[j].mass * dy * invDist3;
         }
 
-        corpos[i].vel.x += ax * dt;
-        corpos[i].vel.y += ay * dt;
+		// meia etapa velocidade
+        corpos[i].vel.x += acc[i].x * dt * 0.5;
+        corpos[i].vel.y += acc[i].y * dt * 0.5;
 
         if (corpos[i].vel.x > maxVel) corpos[i].vel.x = maxVel;
 		if (corpos[i].vel.x < -maxVel) corpos[i].vel.x = -maxVel;
@@ -50,10 +57,82 @@ void atualiza_sistema_gravidade(Corpo* corpos, int n) {
 		if (corpos[i].vel.y < -maxVel) corpos[i].vel.y = -maxVel;
     }
 
+	// posição
     for (int i = 0; i < n; i++) {
         corpos[i].pos.x += corpos[i].vel.x * dt;
         corpos[i].pos.y += corpos[i].vel.y * dt;
     }
+
+	// zera aceleração novamente
+	for (int i = 0; i < n; i++) {
+		acc[i] = (Vector2){0,0};
+	}
+
+	// recalcula aceleração
+    for (int i = 0; i < n; i++) {
+        double maxVel = 50.0;
+        for (int j = 0; j < n; j++) {
+
+            if (i == j) continue;
+
+            float dx = corpos[j].pos.x - corpos[i].pos.x;
+            float dy = corpos[j].pos.y - corpos[i].pos.y;
+
+			float distSq = dx*dx + dy*dy + SOFTENING*SOFTENING;
+
+			double invDist = 1.0 / sqrt(distSq);
+			double invDist3 = invDist * invDist * invDist;
+
+            acc[i].x += G * corpos[j].mass * dx * invDist3;
+            acc[i].y += G * corpos[j].mass * dy * invDist3;
+        }
+    }
+
+	// completa velocidade
+    for (int i=0;i<n;i++) {
+        corpos[i].vel.x += acc[i].x * dt * 0.5;
+        corpos[i].vel.y += acc[i].y * dt * 0.5;
+    }
+}
+
+int encontrar_dominante (Corpo corpos[], int n, int i) {
+
+	int best = -1;
+	double bestScore = 0;
+
+	for (int j = 0; j < n; j++) {
+		if (i == j) continue;
+		
+		double dx = corpos[j].pos.x - corpos[i].pos.x;
+        double dy = corpos[j].pos.y - corpos[i].pos.y;
+
+		double distSq = dx * dx + dy * dy;
+
+		double score = corpos[j].mass / distSq;
+
+		if (score > bestScore) {
+			bestScore = score;
+			best = j;
+		}
+	}
+	return best;
+}
+
+void aplicar_orbita (Corpo corpos[], int i, int j) {
+	double dx = corpos[i].pos.x - corpos[j].pos.x;
+    double dy = corpos[i].pos.y - corpos[j].pos.y;
+
+    double r = sqrt(dx*dx + dy*dy);
+
+    if (r < 1) return;
+
+    double v = sqrt(G * corpos[j].mass / r);
+
+    double nx = -dy / r;
+    double ny =  dx / r;
+
+    corpos[i].vel.x = nx * v;
+    corpos[i].vel.y = ny * v;
 }
 
 void adicionar_corpo_lista(Corpo** arr, int* count, int* capacity, Corpo b) {
@@ -65,6 +144,11 @@ void adicionar_corpo_lista(Corpo** arr, int* count, int* capacity, Corpo b) {
     (*arr)[*count] = b; // coloca o próximo corpo no próximo lugar disponível
     printf("Adicionado corpo de massa %f no array.\n", b.mass);
     (*count)++; // seta o valor do próximo lugar disponível
+}
+
+
+int gera_pos_aleatoria () {
+	return rand() % 300 + 1; 
 }
 
 
@@ -96,24 +180,23 @@ int main ()
 	};
 
 	Corpo planeta = {
-		{WIDTH/2, HEIGHT/2-300},
-		{0.01, 0},
-		10
+		{gera_pos_aleatoria(), gera_pos_aleatoria()},
+		{0.1, 0},
+		100
 	};
 
 	Corpo planeta2 = {
-		{WIDTH/2-300, HEIGHT/2},
-		{0.01, 0},
-		5
+		{gera_pos_aleatoria(), gera_pos_aleatoria()},
+		{0.1, 0},
+		50
 	};
 	
-
 	//trail
-	Vector2 pos = {WIDTH/2, HEIGHT/2-300};
+	Vector2 pos = corpos[2].pos;
     Vector2 prev = pos;
 
 	//trail2
-	Vector2 pos2 = {WIDTH/2, HEIGHT/2-300};
+	Vector2 pos2 = corpos[1].pos;
     Vector2 prev2 = pos2;
 
 	RenderTexture2D trail = LoadRenderTexture(WIDTH, HEIGHT);
@@ -126,6 +209,13 @@ int main ()
     adicionar_corpo_lista(&corpos, &count, &capacity, sol);
     adicionar_corpo_lista(&corpos, &count, &capacity, planeta);
     adicionar_corpo_lista(&corpos, &count, &capacity, planeta2);
+
+	for (int i = 0; i <	count; i++) {
+		int j = encontrar_dominante(corpos, count, i);
+		if (j != -1) {
+			aplicar_orbita(corpos, i, j);
+		}
+	}
 	
 	// game loop
 	while (!WindowShouldClose()) // run the loop until the user presses ESCAPE or presses the Close button on the window
