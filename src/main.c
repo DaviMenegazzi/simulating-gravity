@@ -1,214 +1,58 @@
 #include "raylib.h"
+#include "raymath.h"
+#include "rlgl.h"
 #include "resource_dir.h"	// utility header for SearchAndSetResourceDir
 #include "math.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "engine.h"
 
-typedef struct {
-	Vector2 pos;
-	Vector2 vel;
-	double mass;
-} Corpo;
+// tamanho da tela
+const int WIDTH = 1280;
+const int HEIGHT = 800;
 
-// Gravitational constant
-const double G = 0.9;
+// capacidade e contagem de corpos na simulação
+int capacity = 100;
+int count = 0;
 
-// Definindo corpos
-const double dt = 0.3;
-
-const double SOFTENING = 1;
-
-void atualiza_sistema_gravidade(Corpo* corpos, int n) {
-
-	static Vector2 acc[1024];
-
-	// zera aceleração
-	for (int i = 0; i < n; i++) {
-		acc[i] = (Vector2){0,0};
-	}
-	
-	// calcula aceleração
-    for (int i = 0; i < n; i++) {
-        double maxVel = 50.0;
-        for (int j = 0; j < n; j++) {
-
-            if (i == j) continue;
-
-            float dx = corpos[j].pos.x - corpos[i].pos.x;
-            float dy = corpos[j].pos.y - corpos[i].pos.y;
-
-			float distSq = dx*dx + dy*dy + SOFTENING*SOFTENING;
-
-			double invDist = 1.0 / sqrt(distSq);
-			double invDist3 = invDist * invDist * invDist;
-
-            acc[i].x += G * corpos[j].mass * dx * invDist3;
-            acc[i].y += G * corpos[j].mass * dy * invDist3;
-        }
-
-		// meia etapa velocidade
-        corpos[i].vel.x += acc[i].x * dt * 0.5;
-        corpos[i].vel.y += acc[i].y * dt * 0.5;
-
-        if (corpos[i].vel.x > maxVel) corpos[i].vel.x = maxVel;
-		if (corpos[i].vel.x < -maxVel) corpos[i].vel.x = -maxVel;
-
-		if (corpos[i].vel.y > maxVel) corpos[i].vel.y = maxVel;
-		if (corpos[i].vel.y < -maxVel) corpos[i].vel.y = -maxVel;
-    }
-
-	// posição
-    for (int i = 0; i < n; i++) {
-        corpos[i].pos.x += corpos[i].vel.x * dt;
-        corpos[i].pos.y += corpos[i].vel.y * dt;
-    }
-
-	// zera aceleração novamente
-	for (int i = 0; i < n; i++) {
-		acc[i] = (Vector2){0,0};
-	}
-
-	// recalcula aceleração
-    for (int i = 0; i < n; i++) {
-        double maxVel = 50.0;
-        for (int j = 0; j < n; j++) {
-
-            if (i == j) continue;
-
-            float dx = corpos[j].pos.x - corpos[i].pos.x;
-            float dy = corpos[j].pos.y - corpos[i].pos.y;
-
-			float distSq = dx*dx + dy*dy + SOFTENING*SOFTENING;
-
-			double invDist = 1.0 / sqrt(distSq);
-			double invDist3 = invDist * invDist * invDist;
-
-            acc[i].x += G * corpos[j].mass * dx * invDist3;
-            acc[i].y += G * corpos[j].mass * dy * invDist3;
-        }
-    }
-
-	// completa velocidade
-    for (int i=0;i<n;i++) {
-        corpos[i].vel.x += acc[i].x * dt * 0.5;
-        corpos[i].vel.y += acc[i].y * dt * 0.5;
-    }
-}
-
-int encontrar_dominante (Corpo corpos[], int n, int i) {
-
-	int best = -1;
-	double bestScore = 0;
-
-	for (int j = 0; j < n; j++) {
-		if (i == j) continue;
-		
-		double dx = corpos[j].pos.x - corpos[i].pos.x;
-        double dy = corpos[j].pos.y - corpos[i].pos.y;
-
-		double distSq = dx * dx + dy * dy;
-
-		double score = corpos[j].mass / distSq;
-
-		if (score > bestScore) {
-			bestScore = score;
-			best = j;
-		}
-	}
-	return best;
-}
-
-void aplicar_orbita (Corpo corpos[], int i, int j) {
-	double dx = corpos[i].pos.x - corpos[j].pos.x;
-    double dy = corpos[i].pos.y - corpos[j].pos.y;
-
-    double r = sqrt(dx*dx + dy*dy);
-
-    if (r < 1) return;
-
-    double v = sqrt(G * corpos[j].mass / r);
-
-    double nx = -dy / r;
-    double ny =  dx / r;
-
-    corpos[i].vel.x = nx * v;
-    corpos[i].vel.y = ny * v;
-}
-
-void adicionar_corpo_lista(Corpo** arr, int* count, int* capacity, Corpo b) {
-	if (*count >= *capacity) { // se o valor de count for maior ou igual ao valor da capacidade...
-        *capacity *= 2; // dobra o tamanho da capacidade
-        *arr = realloc(*arr, (*capacity) * sizeof(Corpo)); // realoca a memória pro array
-    }
-
-    (*arr)[*count] = b; // coloca o próximo corpo no próximo lugar disponível
-    printf("Adicionado corpo de massa %f no array.\n", b.mass);
-    (*count)++; // seta o valor do próximo lugar disponível
-}
-
+int qnt_de_corpos = 5;
 
 int gera_pos_aleatoria () {
 	return rand() % 300 + 1; 
 }
 
+Color GetRandomColor() {
+    unsigned char r = (unsigned char)GetRandomValue(0, 255);
+    unsigned char g = (unsigned char)GetRandomValue(0, 255);
+    unsigned char b = (unsigned char)GetRandomValue(0, 255);
+    unsigned char a = 255;
+
+    Color randomColor = { r, g, b, a };
+    return randomColor;
+}
+
+Corpo* gerar_corpos (int n_de_corpos) {
+	Corpo* corpos = malloc(capacity * sizeof(Corpo)); // realoca memória para capacidade disponível
+
+	for (int i = 0; i < n_de_corpos; i++) {
+		Corpo corpo = {
+			{gera_pos_aleatoria(), gera_pos_aleatoria()}, // posição inicial
+			{0, 0}, 									  // velocidade inicial
+			rand() % 10000 + 1, 						  // massa inicial aleatória,
+			GetRandomColor() 							  // tipo inicial aleatória
+		};
+		adicionar_corpo_lista(&corpos, &count, &capacity, corpo);
+	}
+	return corpos;
+}
 
 int main ()
 {
-	int WIDTH = 1280;
-	int HEIGHT = 800;
-
-	int capacity = 100;
-	int count = 0;
-
-	Corpo* corpos = malloc(capacity * sizeof(Corpo)); // realoca memória para capacidade disponível
-
-	// Tell the window to use vsync and work on high DPI displays
 	SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI);
-
-	// Create the window and OpenGL context
 	InitWindow(WIDTH, HEIGHT, "Simulação");
-
-	// Utility function from resource_dir.h to find the resources folder and set it as the current working directory so we can load from it
 	SearchAndSetResourceDir("resources");
 
-
-	// Definindo corpos
-	Corpo sol = {
-		{WIDTH/2, HEIGHT/2},
-		{0, 0},
-		10000
-	};
-
-	Corpo planeta = {
-		{gera_pos_aleatoria(), gera_pos_aleatoria()},
-		{0.1, 0},
-		100
-	};
-
-	Corpo planeta2 = {
-		{gera_pos_aleatoria(), gera_pos_aleatoria()},
-		{0.1, 0},
-		50
-	};
-	
-	//trail
-	Vector2 pos = corpos[2].pos;
-    Vector2 prev = pos;
-
-	//trail2
-	Vector2 pos2 = corpos[1].pos;
-    Vector2 prev2 = pos2;
-
-	RenderTexture2D trail = LoadRenderTexture(WIDTH, HEIGHT);
-
-	// Limpa a textura UMA vez
-    BeginTextureMode(trail);
-        ClearBackground(BLANK);
-    EndTextureMode();
-
-    adicionar_corpo_lista(&corpos, &count, &capacity, sol);
-    adicionar_corpo_lista(&corpos, &count, &capacity, planeta);
-    adicionar_corpo_lista(&corpos, &count, &capacity, planeta2);
+	Corpo* corpos = gerar_corpos(qnt_de_corpos);
 
 	for (int i = 0; i <	count; i++) {
 		int j = encontrar_dominante(corpos, count, i);
@@ -216,52 +60,68 @@ int main ()
 			aplicar_orbita(corpos, i, j);
 		}
 	}
+
+	Camera2D camera = { 0 };
+    camera.zoom = 1.0f;
+
+	int zoomMode = 0;
 	
-	// game loop
-	while (!WindowShouldClose()) // run the loop until the user presses ESCAPE or presses the Close button on the window
+	while (!WindowShouldClose())
 	{
+		// ATUALIZA ZOOM
+		if (IsKeyPressed(KEY_ONE)) zoomMode = 0;
+		else if (IsKeyPressed(KEY_TWO)) zoomMode = 1;
+
+		// se o botão de click continua pressionado
+		if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
+			Vector2 delta = GetMouseDelta();
+            delta = Vector2Scale(delta, -1.0f/camera.zoom);
+            camera.target = Vector2Add(camera.target, delta);
+		}
+
+		// se o modo de zoom estiver ativo
+		if (zoomMode == 0)
+        {
+            float wheel = GetMouseWheelMove();
+            if (wheel != 0)
+            {
+                Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
+                camera.offset = GetMousePosition();
+                camera.target = mouseWorldPos;
+                float scale = 0.2f*wheel;
+                camera.zoom = Clamp(expf(logf(camera.zoom)+scale), 0.125f, 64.0f);
+            }
+        }
+		else
+        {
+            if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
+            {
+                Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
+                camera.offset = GetMousePosition();
+                camera.target = mouseWorldPos;
+            }
+
+            if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
+            {
+                float deltaX = GetMouseDelta().x;
+                float scale = 0.005f*deltaX;
+                camera.zoom = Clamp(expf(logf(camera.zoom)+scale), 0.125f, 64.0f);
+            }
+        }
+		
 		atualiza_sistema_gravidade(corpos, count);
 
-		// Desenha apenas o novo segmento no trail
-        BeginTextureMode(trail);
-			// aplica fade no que já existe
-    		DrawRectangle(0, 0, WIDTH, HEIGHT, Fade(BLACK, 0.008f));
-            DrawCircleV(pos, 1, GREEN);
-
-			// aplica fade no que já existe
-    		DrawRectangle(0, 0, WIDTH, HEIGHT, Fade(BLACK, 0.008f));
-            DrawCircleV(pos2, 1, GREEN);
-        EndTextureMode();
-
-		// drawing
 		BeginDrawing();
-
-		// Setup the back buffer for drawing (clear color and depth buffers)
-		ClearBackground(BLACK);
-
-		// DESENHA O SOL
-		DrawCircleV(corpos[0].pos, 20, WHITE); 
-
-		// DESENHA O PLANETA
-		DrawCircleV(corpos[1].pos, 5, RED); 
-
-		// DESENHA O PLANETA2
-		DrawCircleV(corpos[2].pos, 7, GREEN); 
-
-		// desenha o trail
-		DrawTextureRec(
-			trail.texture,
-			(Rectangle){0, 0, (float)WIDTH, -(float)HEIGHT},
-			(Vector2){0, 0},
-			WHITE
-		);
-
-		// end the frame and get ready for the next one  (display frame, poll input, etc...)
+			ClearBackground(BLACK);
+			BeginMode2D(camera);
+				for (int i = 0; i < qnt_de_corpos; i++) {
+					DrawCircleV(corpos[i].pos, (corpos[i].mass * 0.005f) + 1.0f, corpos[i].cor); 
+				}	
+			EndMode2D();
+			DrawTextEx(GetFontDefault(), TextFormat("[%i, %i]", GetMouseX(), GetMouseY()),
+                Vector2Add(GetMousePosition(), (Vector2){ -44, -24 }), 20, 2, WHITE);
 		EndDrawing();
 	}
-
-	UnloadRenderTexture(trail);
-	// destroy the window and cleanup the OpenGL context
 	CloseWindow();
 	return 0;
 }
