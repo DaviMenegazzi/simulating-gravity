@@ -7,10 +7,6 @@
 #include <stdlib.h>
 #include "engine.h"
 
-// tamanho da tela
-const int WIDTH = 1280;
-const int HEIGHT = 800;
-
 // capacidade e contagem de corpos na simulação
 int capacity = 100;
 int count = 0;
@@ -46,10 +42,32 @@ Corpo* gerar_corpos (int n_de_corpos) {
 	return corpos;
 }
 
+Vector2 GetVirtualMouse(Vector2 mouse, int vw, int vh)
+{
+    Vector2 v;
+    v.x = mouse.x * ((float)vw / GetScreenWidth());
+    v.y = mouse.y * ((float)vh / GetScreenHeight());
+    return v;
+}
+
 int main ()
 {
+
+	// Set the window flag for fullscreen mode
+    SetConfigFlags(FLAG_FULLSCREEN_MODE); //
+
+	const int screenWidth = GetScreenWidth();
+    const int screenHeight = GetScreenHeight();
+
+    const int virtualScreenWidth = 640;
+    const int virtualScreenHeight = 360;
+
+	const float virtualRatio = (float)screenWidth/(float)virtualScreenWidth;
+
 	SetConfigFlags(FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI);
-	InitWindow(WIDTH, HEIGHT, "Simulação");
+	int monitorWidth = GetMonitorWidth(GetCurrentMonitor()); //
+    int monitorHeight = GetMonitorHeight(GetCurrentMonitor()); //
+	InitWindow(monitorWidth, monitorHeight, "Simulação");
 	SearchAndSetResourceDir("resources");
 
 	Corpo* corpos = gerar_corpos(qnt_de_corpos);
@@ -63,8 +81,15 @@ int main ()
 
 	Camera2D camera = { 0 };
     camera.zoom = 1.0f;
+	camera.rotation = 0.0f;
+	camera.target = (Vector2){0, 0};
+	camera.offset = (Vector2){0, 0};
 
 	int zoomMode = 0;
+
+	// pra renderizar todos os objetos
+	RenderTexture2D target = LoadRenderTexture(virtualScreenWidth, virtualScreenHeight);
+	SetTextureFilter(target.texture, TEXTURE_FILTER_POINT);
 	
 	while (!WindowShouldClose())
 	{
@@ -74,7 +99,7 @@ int main ()
 
 		// se o botão de click continua pressionado
 		if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
-			Vector2 delta = GetMouseDelta();
+			Vector2 delta = GetVirtualMouse(GetMouseDelta(), virtualScreenWidth, virtualScreenHeight);
             delta = Vector2Scale(delta, -1.0f/camera.zoom);
             camera.target = Vector2Add(camera.target, delta);
 		}
@@ -85,19 +110,23 @@ int main ()
             float wheel = GetMouseWheelMove();
             if (wheel != 0)
             {
-                Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
-                camera.offset = GetMousePosition();
+                Vector2 vMouse = GetVirtualMouse(GetMousePosition(), virtualScreenWidth, virtualScreenHeight);
+				Vector2 mouseWorldPos = GetScreenToWorld2D(vMouse, camera);
+
+				camera.offset = vMouse;
                 camera.target = mouseWorldPos;
-                float scale = 0.2f*wheel;
-                camera.zoom = Clamp(expf(logf(camera.zoom)+scale), 0.125f, 64.0f);
+                float scale = 0.2f*wheel; 
+				camera.zoom = Clamp(expf(logf(camera.zoom) + scale), 0.25f, 32.0f);
+				camera.zoom = roundf(camera.zoom * 8.0f) / 8.0f;
             }
         }
 		else
         {
             if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
             {
-                Vector2 mouseWorldPos = GetScreenToWorld2D(GetMousePosition(), camera);
-                camera.offset = GetMousePosition();
+                Vector2 vMouse = GetVirtualMouse(GetMousePosition(), virtualScreenWidth, virtualScreenHeight);
+				Vector2 mouseWorldPos = GetScreenToWorld2D(vMouse, camera);
+				camera.offset = vMouse;
                 camera.target = mouseWorldPos;
             }
 
@@ -111,13 +140,27 @@ int main ()
 		
 		atualiza_sistema_gravidade(corpos, count);
 
-		BeginDrawing();
+		BeginTextureMode(target);
 			ClearBackground(BLACK);
 			BeginMode2D(camera);
 				for (int i = 0; i < qnt_de_corpos; i++) {
-					DrawCircleV(corpos[i].pos, (corpos[i].mass * 0.005f) + 1.0f, corpos[i].cor); 
+					DrawCircleV(corpos[i].pos,
+								(corpos[i].mass * 0.005f) + 1.0f,
+								corpos[i].cor);
 				}	
 			EndMode2D();
+		EndTextureMode();
+
+		BeginDrawing();
+			ClearBackground(BLACK);
+			DrawTexturePro(
+				target.texture,
+				(Rectangle){0, 0, virtualScreenWidth, -virtualScreenHeight},
+				(Rectangle){0, 0, GetScreenWidth(), GetScreenHeight()},
+				(Vector2){0,0},
+				0.0f,
+				WHITE
+			);
 			DrawTextEx(GetFontDefault(), TextFormat("[%i, %i]", GetMouseX(), GetMouseY()),
                 Vector2Add(GetMousePosition(), (Vector2){ -44, -24 }), 20, 2, WHITE);
 		EndDrawing();

@@ -11,7 +11,7 @@
 double G = 0.9;
 
 // Definindo corpos
-double dt = 0.3;
+//double dt = 0.003;
 
 // Softening para deixar as órbitas mais suaves
 double SOFTENING = 1;
@@ -19,6 +19,7 @@ double SOFTENING = 1;
 
 int atualiza_sistema_gravidade(Corpo* corpos, int n) {
 
+    double dt = GetFrameTime();
 	static Vector2 acc[1024];
 
 	// zera aceleração
@@ -91,6 +92,13 @@ int atualiza_sistema_gravidade(Corpo* corpos, int n) {
     for (int i=0;i<n;i++) {
         corpos[i].vel.x += acc[i].x * dt * 0.5;
         corpos[i].vel.y += acc[i].y * dt * 0.5;
+        
+        double maxVel = 50.0;
+
+        if (corpos[i].vel.x > maxVel) corpos[i].vel.x = maxVel;
+        if (corpos[i].vel.x < -maxVel) corpos[i].vel.x = -maxVel;
+        if (corpos[i].vel.y > maxVel) corpos[i].vel.y = maxVel;
+        if (corpos[i].vel.y < -maxVel) corpos[i].vel.y = -maxVel;
     }
     return 1;
 }

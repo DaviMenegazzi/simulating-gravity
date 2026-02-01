@@ -2,7 +2,7 @@
 #define ENGINE_H
 
 extern double G;
-extern double dt;
+//extern double dt;
 extern double SOFTENING;
 
 typedef struct {
