@@ -1,6 +1,8 @@
 #ifndef ENGINE_H
 #define ENGINE_H
 
+#include "raylib.h"
+
 extern double G;
 //extern double dt;
 extern double SOFTENING;
@@ -9,6 +11,7 @@ typedef struct {
 	Vector2 pos;
 	Vector2 vel;
 	double mass;
+	double tam;
 	Color cor;
 } Corpo;
 

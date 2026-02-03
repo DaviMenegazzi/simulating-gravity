@@ -11,7 +11,11 @@
 double G = 0.9;
 
 // Definindo corpos
+<<<<<<< HEAD
 //double dt = 0.003;
+=======
+//double dt = 0.3;
+>>>>>>> 6d1e47830cec6476aac4cf76cc2d057ee559f37c
 
 // Softening para deixar as órbitas mais suaves
 double SOFTENING = 1;
@@ -20,6 +24,10 @@ double SOFTENING = 1;
 int atualiza_sistema_gravidade(Corpo* corpos, int n) {
 
     double dt = GetFrameTime();
+<<<<<<< HEAD
+=======
+
+>>>>>>> 6d1e47830cec6476aac4cf76cc2d057ee559f37c
 	static Vector2 acc[1024];
 
 	// zera aceleração
