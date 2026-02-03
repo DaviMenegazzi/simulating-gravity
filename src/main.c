@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "engine.h"
+#include "gui/frame.h"
 
 // tamanho da tela
 const int WIDTH = 1280;
@@ -16,6 +17,8 @@ int capacity = 100;
 int count = 0;
 
 int qnt_de_corpos = 5;
+
+int id_selecionado = -1;
 
 int gera_pos_aleatoria () {
 	return rand() % 300 + 1; 
@@ -33,13 +36,19 @@ Color GetRandomColor() {
 
 Corpo* gerar_corpos (int n_de_corpos) {
 	Corpo* corpos = malloc(capacity * sizeof(Corpo)); // realoca memória para capacidade disponível
-
+	
 	for (int i = 0; i < n_de_corpos; i++) {
+		double massa = rand() % 10000 + 1;
+		double r_tam_corpo = (massa * 0.005f) + 1.0f;
+		Vector2 vel_inicial = {0, 0};
+		Vector2 pos_inicial = {gera_pos_aleatoria(), gera_pos_aleatoria()};
+		Color cor = GetRandomColor();
 		Corpo corpo = {
-			{gera_pos_aleatoria(), gera_pos_aleatoria()}, // posição inicial
-			{0, 0}, 									  // velocidade inicial
-			rand() % 10000 + 1, 						  // massa inicial aleatória,
-			GetRandomColor() 							  // tipo inicial aleatória
+			pos_inicial,  			// posição inicial
+			vel_inicial, 			// velocidade inicial
+			massa, 					// massa inicial aleatória,
+			r_tam_corpo,			// tamanho do corpo
+			cor 					// tipo inicial aleatória
 		};
 		adicionar_corpo_lista(&corpos, &count, &capacity, corpo);
 	}
@@ -71,6 +80,22 @@ int main ()
 		// ATUALIZA ZOOM
 		if (IsKeyPressed(KEY_ONE)) zoomMode = 0;
 		else if (IsKeyPressed(KEY_TWO)) zoomMode = 1;
+
+		// SE CLICADO
+		if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+			Vector2 posicaoClick = GetScreenToWorld2D(GetMousePosition(), camera);
+			for(int i = 0; i < qnt_de_corpos; i++) {
+				
+				double dx = posicaoClick.x-corpos[i].pos.x;
+				double dy = posicaoClick.y-corpos[i].pos.y;
+				double distSq = dx*dx + dy*dy;
+				
+				if (sqrt(distSq) < corpos[i].tam) {
+					// salva o index
+					id_selecionado = i;
+				}
+			}
+		}
 
 		// se o botão de click continua pressionado
 		if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)){
@@ -115,9 +140,23 @@ int main ()
 			ClearBackground(BLACK);
 			BeginMode2D(camera);
 				for (int i = 0; i < qnt_de_corpos; i++) {
-					DrawCircleV(corpos[i].pos, (corpos[i].mass * 0.005f) + 1.0f, corpos[i].cor); 
-				}	
+					DrawCircleV(corpos[i].pos, corpos[i].tam, corpos[i].cor);
+					if (id_selecionado != -1) {
+						DrawCircleV(corpos[id_selecionado].pos, corpos[id_selecionado].tam + 2, WHITE);
+					}
+				}
 			EndMode2D();
+			if (id_selecionado != -1) {
+				Vector2 pos_panel = GetWorldToScreen2D(corpos[id_selecionado].pos, camera);
+				corpo_pop_up(
+					corpos[id_selecionado],
+					(Rectangle) {
+						pos_panel.x, pos_panel.y,
+						100, 100
+					},
+					NULL
+				);
+			}
 			DrawTextEx(GetFontDefault(), TextFormat("[%i, %i]", GetMouseX(), GetMouseY()),
                 Vector2Add(GetMousePosition(), (Vector2){ -44, -24 }), 20, 2, WHITE);
 		EndDrawing();
